@@ -2,9 +2,13 @@
 
 #include "GWMarketWindow.h"
 
-#include <GWCA/GWCA.h>
+#include <GWCA/Constants/Constants.h>
+
+#include <GWCA/Managers/SkillbarMgr.h>
 #include <GWCA/Managers/GameThreadMgr.h>
 #include <GWCA/Managers/UIMgr.h>
+#include <GWCA/GameEntities/Attribute.h>
+
 #include <Logger.h>
 #include <Utils/GuiUtils.h>
 #include <Utils/RateLimiter.h>
@@ -12,6 +16,9 @@
 #include <easywsclient.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Modules/GwDatTextureModule.h>
+#include <Modules/Resources.h>
+#include <Utils/TextUtils.h>
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -19,25 +26,65 @@
 #include <sstream>
 #include <thread>
 #include <unordered_set>
-#include <Utils/TextUtils.h>
-#include <Modules/GwDatTextureModule.h>
-#include <Modules/Resources.h>
+
 
 namespace {
     using easywsclient::WebSocket;
     using json = nlohmann::json;
+
+    const char* market_host = "v2.gwmarket.net";
+    const char* market_name = "GWMarket.net";
 
     // Connection rate limiting
     constexpr uint32_t COST_PER_CONNECTION_MS = 30 * 1000;
     constexpr uint32_t COST_PER_CONNECTION_MAX_MS = 60 * 1000;
 
     // Enums for type-safe representations
-    enum class Currency : uint8_t { Platinum = 0, Ecto = 1, Zkeys = 2, Arms = 3 };
+    enum class Currency : uint8_t { Platinum = 0, Ecto = 1, Zkeys = 2, Arms = 3, Count = 4, All = 0xf };
 
     enum class OrderType : uint8_t { Sell = 0, Buy = 1 };
 
     enum class OrderSortMode : uint8_t { MostRecent = 0, Currency = 1 };
+    Currency order_view_currency = Currency::All;
 
+    // Safe string extraction helper
+    std::string parseStringFromJson(const json& j, const char* key, const std::string& default_val) {
+        if (!j.is_discarded() && j.contains(key) && j[key].is_string()) {
+            return j[key].get<std::string>();
+        }
+        return default_val;
+    };
+    int parseIntFromJson(const json& j, const char* key, const int& default_val)
+    {
+        if (!j.is_discarded() && j.contains(key) && j[key].is_number_integer()) {
+            return j[key].get<int>();
+        }
+        return default_val;
+    };
+    bool parseBoolFromJson(const json& j, const char* key, const bool& default_val)
+    {
+        if (!j.is_discarded() && j.contains(key) && j[key].is_boolean()) {
+            return j[key].get<bool>();
+        }
+        return default_val;
+    };
+    uint64_t parseUint64FromJson(const json& j, const char* key, const uint64_t& default_val)
+    {
+        if (!j.is_discarded() && j.contains(key) && j[key].is_number_unsigned()) {
+            return j[key].get<uint64_t>();
+        }
+        return default_val;
+    };
+    float parseFloatFromJson(const json& j, const char* key, const float& default_val)
+    {
+        if (!j.is_discarded() && j.contains(key)) {
+            if (j[key].is_number_float())
+                return j[key].get<float>();
+            if(j[key].is_number_integer()) 
+                return (float)j[key].get<int>();
+        }
+        return default_val;
+    };
 
     const char* GetPriceTypeString(Currency currency)
     {
@@ -91,48 +138,149 @@ namespace {
         return &(*it.first);
     }
 
+
+    GW::Constants::Attribute AttributeFromString(const std::string& str)
+    {
+        using namespace GW::Constants;
+        // Mesmer
+        if (str == "Fast Casting") return Attribute::FastCasting;
+        if (str == "Illusion Magic") return Attribute::IllusionMagic;
+        if (str == "Domination Magic") return Attribute::DominationMagic;
+        if (str == "Inspiration Magic") return Attribute::InspirationMagic;
+
+        // Necromancer
+        if (str == "Blood Magic") return Attribute::BloodMagic;
+        if (str == "Death Magic") return Attribute::DeathMagic;
+        if (str == "Soul Reaping") return Attribute::SoulReaping;
+        if (str == "Curses") return Attribute::Curses;
+
+        // Elementalist
+        if (str == "Air Magic") return Attribute::AirMagic;
+        if (str == "Earth Magic") return Attribute::EarthMagic;
+        if (str == "Fire Magic") return Attribute::FireMagic;
+        if (str == "Water Magic") return Attribute::WaterMagic;
+        if (str == "Energy Storage") return Attribute::EnergyStorage;
+
+        // Monk
+        if (str == "Healing Prayers") return Attribute::HealingPrayers;
+        if (str == "Smiting Prayers") return Attribute::SmitingPrayers;
+        if (str == "Protection Prayers") return Attribute::ProtectionPrayers;
+        if (str == "Divine Favor") return Attribute::DivineFavor;
+
+        // Warrior
+        if (str == "Strength") return Attribute::Strength;
+        if (str == "Axe Mastery") return Attribute::AxeMastery;
+        if (str == "Hammer Mastery") return Attribute::HammerMastery;
+        if (str == "Swordsmanship") return Attribute::Swordsmanship;
+        if (str == "Tactics") return Attribute::Tactics;
+
+        // Ranger
+        if (str == "Beast Mastery") return Attribute::BeastMastery;
+        if (str == "Expertise") return Attribute::Expertise;
+        if (str == "Wilderness Survival") return Attribute::WildernessSurvival;
+        if (str == "Marksmanship") return Attribute::Marksmanship;
+
+        // Assassin
+        if (str == "Dagger Mastery") return Attribute::DaggerMastery;
+        if (str == "Deadly Arts") return Attribute::DeadlyArts;
+        if (str == "Shadow Arts") return Attribute::ShadowArts;
+        if (str == "Critical Strikes") return Attribute::CriticalStrikes;
+
+        // Ritualist
+        if (str == "Communing") return Attribute::Communing;
+        if (str == "Restoration Magic") return Attribute::RestorationMagic;
+        if (str == "Channeling Magic") return Attribute::ChannelingMagic;
+        if (str == "Spawning Power") return Attribute::SpawningPower;
+
+        // Paragon
+        if (str == "Spear Mastery") return Attribute::SpearMastery;
+        if (str == "Command") return Attribute::Command;
+        if (str == "Motivation") return Attribute::Motivation;
+        if (str == "Leadership") return Attribute::Leadership;
+
+        // Dervish
+        if (str == "Scythe Mastery") return Attribute::ScytheMastery;
+        if (str == "Wind Prayers") return Attribute::WindPrayers;
+        if (str == "Earth Prayers") return Attribute::EarthPrayers;
+        if (str == "Mysticism") return Attribute::Mysticism;
+
+        return Attribute::None;
+    }
+
     // Data structures
     struct Price {
         Currency type;
         int quantity;
-        double price;
+        float price;
 
         static Price FromJson(const json& j)
         {
             Price p;
-            int typeNum = j.value("type", 0);
-            p.type = static_cast<Currency>(typeNum);
-            p.quantity = j.value("quantity", 0);
-            p.price = j.value("price", 0.0);
+            p.type = static_cast<Currency>(parseIntFromJson(j, "type", 0));
+            p.quantity = parseIntFromJson(j, "quantity", 0);
+            p.price = parseFloatFromJson(j, "price", 0.f);
             return p;
         }
     };
+    struct WeaponDetails {
+        // "weaponDetails":{"attribute":"Tactics","requirement":9,"inscription":true,"oldschool":false,"core":null,"prefix":null,"suffix":null},
+        GW::Constants::Attribute attribute = GW::Constants::Attribute::None;
+        uint8_t requirement = 0;
+        bool inscribable = false;
+        static WeaponDetails FromJson(const json& j)
+        {
+            WeaponDetails p;
+            p.attribute = AttributeFromString(parseStringFromJson(j, "attribute", ""));
+            p.requirement = parseIntFromJson(j, "requirement", 0) & 0xf;
+            p.inscribable = parseBoolFromJson(j, "inscription", false);
+            return p;
+        }
+
+        std::string toString() const {
+            std::string out;
+            const auto attrib_data = GW::SkillbarMgr::GetAttributeConstantData(attribute);
+            if (attrib_data) {
+                out += std::format("Req.{} {}", requirement, Resources::DecodeStringId(attrib_data->name_id, GW::Constants::Language::English)->string().c_str());
+            }
+            if (inscribable) {
+                if (!out.empty()) out += ", ";
+                out += "Inscribable";
+            }
+            return out;
+        }
+
+    };
 
     struct MarketItem {
-        const std::string* name;
-        const std::string* player;
+        std::string name;
+        std::string player;
         OrderType orderType;
         int quantity;
         std::vector<Price> prices;
         time_t lastRefresh = 0;
+        WeaponDetails weaponDetails;
+        std::string description;
+
+        float price_per() const { return prices.empty() ? 0.f : prices[0].price / quantity; }
+        Currency currency() const { return prices.empty() ? Currency::All : prices[0].type; }
 
         static MarketItem FromJson(const json& j)
         {
             MarketItem item;
+            if (j.is_discarded()) return item;
 
-            std::string name_str = j.value("name", "");
-            item.name = InternString(name_str);
+            item.name = parseStringFromJson(j, "name", "");
+            item.player = parseStringFromJson(j, "player", "");
+            item.description = parseStringFromJson(j, "description", "");
+            item.orderType = static_cast<OrderType>(parseIntFromJson(j, "orderType", 0));
+            item.quantity = parseIntFromJson(j, "quantity", 0);
 
-            std::string player_str = j.value("player", "");
-            item.player = InternString(player_str);
+            if (j.contains("weaponDetails") && j["weaponDetails"].is_object()) {
+                item.weaponDetails = WeaponDetails::FromJson(j["weaponDetails"]);
+            }
 
-            int orderTypeNum = j.value("orderType", 0);
-            item.orderType = static_cast<OrderType>(orderTypeNum);
-
-            item.quantity = j.value("quantity", 0);
-
-            uint64_t lastRefresh_ms = j.value("lastRefresh", 0ULL);
-            item.lastRefresh = lastRefresh_ms / 1000;
+            uint64_t lastRefresh_ms = parseUint64FromJson(j, "lastRefresh", 0ULL);
+            item.lastRefresh = lastRefresh_ms ? lastRefresh_ms / 1000 : 0;
 
             if (j.contains("prices") && j["prices"].is_array()) {
                 for (const auto& price_json : j["prices"]) {
@@ -142,6 +290,7 @@ namespace {
 
             return item;
         }
+        bool has_weapon_details() const { return weaponDetails.attribute != GW::Constants::Attribute::None;}
     };
 
     struct AvailableItem {
@@ -153,7 +302,6 @@ namespace {
     // Settings
     bool auto_refresh = true;
     int refresh_interval = 60;
-    constexpr char ws_host[] = "wss://gwmarket.net/socket.io/?EIO=4&transport=websocket";
 
     // WebSocket
     WebSocket* ws = nullptr;
@@ -171,6 +319,7 @@ namespace {
     std::vector<MarketItem> last_items;
     std::vector<MarketItem> current_item_orders;
     std::string current_viewing_item;
+    std::map<std::string, AvailableItem> favorite_items;
 
     // UI
     char search_buffer[256] = "";
@@ -203,6 +352,7 @@ namespace {
     void DeleteWebSocket(WebSocket* socket);
     void ConnectWebSocket(const bool force);
     void DrawItemList();
+    void DrawFavoritesList();
     void DrawItemDetails();
     void Refresh();
 
@@ -226,11 +376,11 @@ namespace {
 
     bool ParseSocketIOMessage(const std::string& message, std::string& event, json& data)
     {
-        if (message.length() < 2 || message.substr(0, 2) != "42") 
-            return false;
+        if (message.length() < 2 || message.substr(0, 2) != "42") return false;
 
-        json parsed = json::parse(message.substr(2),nullptr,false);
+        json parsed = json::parse(message.substr(2), nullptr, false);
         if (!parsed.is_discarded() && parsed.is_array() && parsed.size() >= 1) {
+            if (!parsed[0].is_string()) return false;
             event = parsed[0].get<std::string>();
             if (parsed.size() >= 2) {
                 data = parsed[1];
@@ -244,16 +394,19 @@ namespace {
     {
         available_items.clear();
         available_items.reserve(orders.size());
+        for (auto& i : favorite_items) {
+            i.second = {};
+        }
         for (auto it = orders.begin(); it != orders.end(); ++it) {
             AvailableItem item;
+            const auto& j = it.value();
             item.name = InternString(it.key());
-            if (it.value().contains("sellWeek")) {
-                item.sellOrders += it.value()["sellWeek"].get<int>();
-            }
-            if (it.value().contains("buyWeek")) {
-                item.buyOrders += it.value()["buyWeek"].get<int>();
-            }
+            item.sellOrders = parseIntFromJson(j, "sellWeek", 0);
+            item.buyOrders = parseIntFromJson(j, "buyWeek", 0);
             available_items.push_back(item);
+            if (favorite_items.contains(*item.name)) {
+                favorite_items[*item.name] = item;
+            }
         }
         available_items_needs_sort = true;
         Log::Log("Received %zu available items", available_items.size());
@@ -359,19 +512,6 @@ namespace {
                     }
                 }
                 break;
-            default: {
-                if (message.starts_with("#042")) {
-                    std::string event;
-                    json data;
-                    if (!ParseSocketIOMessage(&message[2], event, data)) break;
-                    if (event == "GetAvailableOrders")
-                        OnGetAvailableOrders(data);
-                    else if (event == "GetLastItems")
-                        OnGetLastItems(data);
-                    else if (event == "GetItemOrders")
-                        OnGetItemOrders(data);
-                }
-            } break;
         }
     }
 
@@ -436,6 +576,25 @@ namespace {
         if (!force && !ws_rate_limiter.AddTime(COST_PER_CONNECTION_MS, COST_PER_CONNECTION_MAX_MS)) {
             return;
         }
+        should_stop = true;
+        if (worker && worker->joinable()) worker->join();
+        delete worker;
+        should_stop = false;
+        worker = new std::thread([] {
+            while (!should_stop) {
+                std::function<void()> job;
+                bool found = false;
+
+                if (!thread_jobs.empty()) {
+                    job = thread_jobs.front();
+                    thread_jobs.pop();
+                    found = true;
+                }
+
+                if (found) job();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        });
 
         int res;
         if (!wsaData.wVersion && (res = WSAStartup(MAKEWORD(2, 2), &wsaData)) != 0) {
@@ -445,6 +604,7 @@ namespace {
 
         ws_connecting = true;
         thread_jobs.push([] {
+            std::string ws_host = std::format("wss://{}/socket.io/?EIO=4&transport=websocket", market_host);
             ws = WebSocket::from_url(ws_host);
             if (ws) {
                 Log::Log("Connected");
@@ -507,6 +667,52 @@ namespace {
         }
     }
 
+    void DrawFavoritesList()
+    {
+        if (favorite_items.empty()) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No favorites");
+            return;
+        }
+
+        for (const auto& favorite : favorite_items) {
+            ImGui::PushID(favorite.first.c_str());
+
+            bool selected = current_viewing_item == favorite.first;
+            if (ImGui::Selectable(favorite.first.c_str(), selected)) {
+                current_viewing_item = favorite.first;
+                SendGetItemOrders(favorite.first);
+            }
+
+            ImGui::SameLine(300);
+            const auto& item = favorite.second;
+            if (item.sellOrders > 0 && item.buyOrders > 0) {
+                ImGui::Text("%d  Seller%s, %d Buyer%s", item.sellOrders, item.sellOrders == 1 ? "" : "s", item.buyOrders, item.buyOrders == 1 ? "" : "s");
+            }
+            else if (item.sellOrders > 0) {
+                ImGui::Text("%d  Seller%s", item.sellOrders, item.sellOrders == 1 ? "" : "s");
+            }
+            else if (item.buyOrders > 0) {
+                ImGui::Text("%d  Buyer%s", item.buyOrders, item.buyOrders == 1 ? "" : "s");
+            }
+
+            ImGui::PopID();
+        }
+    }
+    void ToggleFavourite(const std::string& item_name, bool is_favorite) {
+        if (item_name.empty()) return;
+        if (!is_favorite) {
+            favorite_items.erase(item_name);
+        }
+        else {
+            const auto found = std::ranges::find_if(available_items.begin(), available_items.end(), [item_name](auto& item) {
+                return *item.name == item_name;
+            });
+            favorite_items[item_name] = {};
+            if (found != available_items.end()) {
+                favorite_items[item_name] = *found;
+            }
+        }
+    }
     void DrawItemDetails()
     {
         if (current_viewing_item.empty()) {
@@ -516,10 +722,10 @@ namespace {
 
         ImGui::Text("Item: %s", current_viewing_item.c_str());
 
-                // Sort mode dropdown
+        // Sort mode dropdown
         ImGui::SameLine();
         ImGui::SetNextItemWidth(150.0f);
-        if (ImGui::BeginCombo("##sort_mode", order_sort_mode == OrderSortMode::MostRecent ? "Most Recent" : "Cheapest")) {
+        if (ImGui::BeginCombo("##sort_mode", order_sort_mode == OrderSortMode::MostRecent ? "Most Recent" : "Currency")) {
             if (ImGui::Selectable("Most Recent", order_sort_mode == OrderSortMode::MostRecent)) {
                 order_sort_mode = OrderSortMode::MostRecent;
                 current_orders_needs_sort = true;
@@ -530,8 +736,48 @@ namespace {
             }
             ImGui::EndCombo();
         }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::BeginCombo("##view_currency", order_view_currency == Currency::All ? "All" : GetPriceTypeString(order_view_currency))) {
+            if (ImGui::Selectable("All", order_view_currency == Currency::All)) {
+                order_view_currency = Currency::All;
+            }
+            for (uint8_t i = 0; i < (uint8_t)Currency::Count; i++) {
+                auto c = (Currency)i;
+                if (ImGui::Selectable(GetPriceTypeString(c), order_view_currency == c)) {
+                    order_view_currency = c;
+                }
+            }
+            ImGui::EndCombo();
+        }
 
         ImGui::Separator();
+
+        // Add favorite/unfavorite button
+        if (!current_viewing_item.empty()) {
+            bool is_favorite = favorite_items.contains(current_viewing_item);
+            std::string fav_label = std::format("{} {}", ICON_FA_STAR, is_favorite ? "Unfavorite" : "Favorite");
+            if (ImGui::Button(fav_label.c_str())) {
+                ToggleFavourite(current_viewing_item, !is_favorite);
+            }
+            ImGui::SameLine();
+            std::string url = std::format("https://{}/item/{}", market_host, TextUtils::UrlEncode(current_viewing_item,' '));
+            auto btn_label = std::format("{} {}", ICON_FA_GLOBE, market_name);
+            if (ImGui::Button(btn_label.c_str())) {
+                GW::GameThread::Enqueue([url]() {
+                    GW::UI::SendUIMessage(GW::UI::UIMessage::kOpenWikiUrl, (void*)url.c_str());
+                });
+            }
+            ImGui::SameLine();
+            btn_label = std::format("{} Guild Wars Wiki", ICON_FA_GLOBE);
+            if (ImGui::Button(btn_label.c_str())) {
+                GW::GameThread::Enqueue([]() {
+                    auto url = GuiUtils::WikiUrl(current_viewing_item);
+                    GW::UI::SendUIMessage(GW::UI::UIMessage::kOpenWikiUrl, (void*)url.c_str());
+                });
+            }
+            ImGui::Separator();
+        }
 
         if (current_item_orders.empty()) {
             ImGui::Text("Loading...");
@@ -544,7 +790,8 @@ namespace {
                 // Sort by price (cheapest first)
                 std::sort(current_item_orders.begin(), current_item_orders.end(), [](const MarketItem& a, const MarketItem& b) {
                     if (a.prices.empty() || b.prices.empty()) return false;
-                    return a.prices[0].type < b.prices[0].type;
+                    if (a.currency() != b.currency()) return a.currency() < b.currency();
+                    return a.price_per() < b.price_per();
                 });
             }
             else {
@@ -558,17 +805,24 @@ namespace {
 
         const auto font_size = ImGui::CalcTextSize(" ");
         auto DrawOrder = [font_size](const MarketItem& order) {
-            ImGui::PushID(&order);
-            const auto top = ImGui::GetCursorPosY();
-            ImGui::TextUnformatted(order.player->c_str());
-            const auto timetext = TextUtils::RelativeTime(order.lastRefresh);
-            ImGui::SameLine();
-            ImGui::TextDisabled(timetext.c_str());
-
-            ImGui::Text("Wants to %s %d for ", order.orderType == OrderType::Sell ? "sell" : "buy", order.quantity);
-
             // NB: Seems to be an array of prices given by the API, but the website only shows the first one?
             const auto& price = order.prices[0];
+            if (order_view_currency != Currency::All && order_view_currency != price.type) return;
+
+            ImGui::PushID(&order);
+            const auto top = ImGui::GetCursorPosY();
+            ImGui::TextUnformatted(order.player.c_str());
+            const auto timetext = TextUtils::RelativeTime(order.lastRefresh);
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", timetext.c_str());
+            if (order.has_weapon_details()) {
+                ImGui::TextUnformatted(order.weaponDetails.toString().c_str());
+            }
+            if (!order.description.empty()) {
+                ImGui::TextUnformatted(order.description.c_str());
+            }
+
+            ImGui::Text("Wants to %s %d for ", order.orderType == OrderType::Sell ? "sell" : "buy", order.quantity);
 
             ImGui::SameLine(0, 0);
             const auto tex = GetCurrencyImage(price.type);
@@ -583,13 +837,13 @@ namespace {
                 ImGui::Text("%.2f %s", price.price, GetPriceTypeString(price.type));
             }
             ImGui::SameLine();
-            ImGui::TextDisabled("(%.0f %s each)", price.price / order.quantity, GetPriceTypeString(price.type));
+            const auto price_per = order.price_per();
+            ImGui::TextDisabled(price_per == static_cast<int>(price_per) ? "(%.0f %s each)" : "(%.1f %s each)", price_per, GetPriceTypeString(price.type));
             const auto original_cursor_pos = ImGui::GetCursorPos();
-            const auto height = original_cursor_pos.y - top;
-            
+
             ImGui::SetCursorPos({ImGui::GetContentRegionAvail().x - 100.f, top + 5.f});
-            if (ImGui::Button("Whisper##seller", {100.f, height - 10.f})) {
-                GW::GameThread::Enqueue([player = *order.player] {
+            if (ImGui::Button("Whisper##seller", {100.f, 0.f})) {
+                GW::GameThread::Enqueue([player = order.player] {
                     std::wstring name_ws = TextUtils::StringToWString(player);
                     GW::UI::SendUIMessage(GW::UI::UIMessage::kOpenWhisper, (wchar_t*)name_ws.c_str());
                 });
@@ -603,10 +857,9 @@ namespace {
 
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "SELL ORDERS:");
         ImGui::Separator();
-        
+
         for (const auto& order : current_item_orders) {
-            if (!(order.orderType == OrderType::Sell && order.quantity && !order.prices.empty())) 
-                continue;
+            if (!(order.orderType == OrderType::Sell && order.quantity && !order.prices.empty())) continue;
             DrawOrder(order);
         }
 
@@ -614,16 +867,32 @@ namespace {
         ImGui::Separator();
 
         for (const auto& order : current_item_orders) {
-            if (!(order.orderType == OrderType::Buy && order.quantity && !order.prices.empty())) 
-                continue;
+            if (!(order.orderType == OrderType::Buy && order.quantity && !order.prices.empty())) continue;
             DrawOrder(order);
         }
     }
 
-    void Refresh() {
+    void Refresh()
+    {
         if (!socket_io_ready) return;
         SendGetAvailableOrders();
-        //SendGetLastItemsByFamily("all");
+        // SendGetLastItemsByFamily("all");
+    }
+
+    bool collapsed = false;
+    bool ShouldConnect() {
+        return GWMarketWindow::Instance().visible && !collapsed;
+    }
+
+    void Disconnect() {
+        if (!ws) return;
+        should_stop = true;
+        if (worker && worker->joinable()) worker->join();
+        delete worker;
+        worker = 0;
+        DeleteWebSocket(ws);
+        ws = nullptr;
+        ws_connecting = socket_io_ready = false;
     }
 
 } // namespace
@@ -631,35 +900,13 @@ namespace {
 void GWMarketWindow::Initialize()
 {
     ToolboxWindow::Initialize();
-
-    worker = new std::thread([this] {
-        while (!should_stop) {
-            std::function<void()> job;
-            bool found = false;
-
-            if (!thread_jobs.empty()) {
-                job = thread_jobs.front();
-                thread_jobs.pop();
-                found = true;
-            }
-
-            if (found) job();
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    });
-
-    ConnectWebSocket(true);
+    ConnectWebSocket();
     Log::Log("Market Browser initialized");
 }
 
 void GWMarketWindow::Terminate()
 {
-    should_stop = true;
-    if (worker && worker->joinable()) worker->join();
-    delete worker;
-    DeleteWebSocket(ws);
-    ws = nullptr;
-    ws_connecting = socket_io_ready = false;
+    Disconnect();
     ToolboxWindow::Terminate();
 }
 
@@ -668,6 +915,11 @@ void GWMarketWindow::Update(float delta)
     ToolboxWindow::Update(delta);
 
     if (ws) {
+        if (!ShouldConnect()) {
+            Disconnect();
+            ws_rate_limiter = {};
+            return;
+        }
         ws->poll();
         ws->dispatch([](const std::string& msg) {
             OnWebSocketMessage(msg);
@@ -678,20 +930,19 @@ void GWMarketWindow::Update(float delta)
 
         if (ws->getReadyState() == WebSocket::CLOSED) {
             Log::Warning("Disconnected");
-            DeleteWebSocket(ws);
-            ws = nullptr;
-            socket_io_ready = false;
+            Disconnect();
+            return;
+        }
+        if (auto_refresh && socket_io_ready) {
+            refresh_timer += delta;
+            if (refresh_timer >= refresh_interval) {
+                refresh_timer = 0.0f;
+                Refresh();
+            }
         }
     }
-    ConnectWebSocket();
-
-    if (auto_refresh && socket_io_ready) {
-        refresh_timer += delta;
-        if (refresh_timer >= refresh_interval) {
-            refresh_timer = 0.0f;
-            Refresh();
-        }
-    }
+    if (!ws && ShouldConnect())
+        ConnectWebSocket();
 }
 
 void GWMarketWindow::LoadSettings(ToolboxIni* ini)
@@ -699,6 +950,29 @@ void GWMarketWindow::LoadSettings(ToolboxIni* ini)
     ToolboxWindow::LoadSettings(ini);
     LOAD_BOOL(auto_refresh);
     refresh_interval = static_cast<int>(ini->GetLongValue(Name(), "refresh_interval", 60));
+
+    // Load favorite items
+    favorite_items.clear();
+    const char* favorites_str = ini->GetValue(Name(), "favorite_items", "");
+    if (favorites_str && strlen(favorites_str) > 0) {
+        std::string favorites(favorites_str);
+        size_t start = 0;
+        size_t pos = 0;
+        while ((pos = favorites.find('|', start)) != std::string::npos) {
+            std::string item = favorites.substr(start, pos - start);
+            if (!item.empty()) {
+                ToggleFavourite(item, true);
+            }
+            start = pos + 1;
+        }
+        // Add the last item (or only item if no pipes found)
+        if (start < favorites.length()) {
+            std::string item = favorites.substr(start);
+            if (!item.empty()) {
+                ToggleFavourite(item, true);
+            }
+        }
+    }
 }
 
 void GWMarketWindow::SaveSettings(ToolboxIni* ini)
@@ -706,6 +980,16 @@ void GWMarketWindow::SaveSettings(ToolboxIni* ini)
     ToolboxWindow::SaveSettings(ini);
     SAVE_BOOL(auto_refresh);
     ini->SetLongValue(Name(), "refresh_interval", refresh_interval);
+
+    // Save favorite items as pipe-separated string
+    std::string favorites_str;
+    for (const auto& item : favorite_items) {
+        if (!favorites_str.empty()) {
+            favorites_str += "|";
+        }
+        favorites_str += item.first;
+    }
+    ini->SetValue(Name(), "favorite_items", favorites_str.c_str());
 }
 
 void GWMarketWindow::DrawSettingsInternal()
@@ -737,7 +1021,8 @@ void GWMarketWindow::Draw(IDirect3DDevice9*)
     if (!visible) return;
 
     ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin(Name(), GetVisiblePtr(), GetWinFlags())) {
+    collapsed = !ImGui::Begin(Name(), GetVisiblePtr(), GetWinFlags());
+    if (!collapsed) {
         if (socket_io_ready) {
             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Connected");
         }
@@ -767,15 +1052,53 @@ void GWMarketWindow::Draw(IDirect3DDevice9*)
         ImGui::InputText("Search", search_buffer, sizeof(search_buffer));
         ImGui::Separator();
 
-        ImGui::BeginChild("ItemList", ImVec2(450, 0), true);
+        // Calculate available width and height for the two-column layout
+        const float available_width = ImGui::GetContentRegionAvail().x;
+        const float available_height = ImGui::GetContentRegionAvail().y - 32.f;
+        const float left_column_width = available_width * 0.5f - ImGui::GetStyle().ItemSpacing.x * 0.5f;
+        const float right_column_width = available_width * 0.5f - ImGui::GetStyle().ItemSpacing.x * 0.5f;
+
+        // Left column split: 65% for item list, 35% for favorites
+        const float item_list_height = available_height * 0.7f - ImGui::GetStyle().ItemSpacing.y * 0.5f;
+        const float favorites_height = available_height * 0.3f - ImGui::GetStyle().ItemSpacing.y * 0.5f;
+
+        // Left column - Item List (top 65%)
+        ImGui::BeginChild("ItemList", ImVec2(left_column_width, item_list_height), true);
         DrawItemList();
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        const auto favourites_cursor_pos = ImGui::GetCursorPos();
 
-        ImGui::BeginChild("ItemDetails", ImVec2(0, 0), true);
+        // Right column - Item Details (full height)
+        ImGui::SameLine();
+        ImGui::BeginChild("ItemDetails", ImVec2(right_column_width, available_height), true);
         DrawItemDetails();
         ImGui::EndChild();
+
+        ImGui::SetCursorPos(favourites_cursor_pos);
+
+        // Left column - Favorites List (bottom 35%)
+        ImGui::BeginChild("FavoritesList", ImVec2(left_column_width, favorites_height), true);
+        ImGui::Text("Favorites");
+        ImGui::Separator();
+        DrawFavoritesList();
+        ImGui::EndChild();
+
+        
+
+            /* Link to website footer */
+        static char buf[128];
+        if (!buf[0]) {
+            const auto url = std::format("https://{}", market_host);
+            snprintf(buf, 128, "Powered by %s", url.c_str());
+        }
+
+        if (ImGui::Button(buf, ImVec2(ImGui::GetContentRegionAvail().x, 20.0f))) {
+            GW::GameThread::Enqueue([]() {
+                const auto url = std::format("https://{}", market_host);
+                GW::UI::SendUIMessage(GW::UI::UIMessage::kOpenWikiUrl, (void*)url.c_str());
+            });
+        }
     }
     ImGui::End();
 }
