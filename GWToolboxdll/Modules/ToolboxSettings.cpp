@@ -35,7 +35,7 @@
 #include <Modules/CodeOptimiserModule.h>
 #include <Modules/VendorFix.h>
 #include <Modules/AudioSettings.h>
-#include <Modules/NPCVoiceModule.h>
+#include <Modules/TextToSpeechModule.h>
 #include <Modules/FpsFix.h>
 #include <Modules/GamepadModule.h>
 
@@ -162,7 +162,7 @@ namespace {
 #if 0
         ExtraWeaponSets::Instance(),
 #endif
-        NPCVoiceModule::Instance(),
+        TextToSpeechModule::Instance(),
         AudioSettings::Instance(),   
         FpsFix::Instance(),          
         GamepadModule::Instance()

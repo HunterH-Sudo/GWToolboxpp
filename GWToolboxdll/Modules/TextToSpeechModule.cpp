@@ -1,4 +1,4 @@
-#include "NPCVoiceModule.h"
+#include "TextToSpeechModule.h"
 #include "stdafx.h"
 
 #include <GWCA/Managers/GameThreadMgr.h>
@@ -41,6 +41,20 @@ namespace {
 
     const char* gwtts_hostname = "https://tts.gwtoolbox.com";
     //const char* gwtts_hostname = "http://localhost:8081";
+
+    // Cost optimization settings
+    bool stop_speech_when_dialog_closed = false;
+    bool play_goodbye_messages = true;
+    bool only_use_first_dialog = false;
+    bool only_use_first_sentence = true;
+    bool play_speech_from_non_friendly_npcs = true;
+    bool play_speech_bubbles_in_explorable = false;
+    bool play_speech_bubbles_in_outpost = true;
+    bool play_speech_bubbles_from_party_members = false;
+    float npc_speech_bubble_range = GW::Constants::Range::Earshot;
+    bool play_speech_from_vendors = true;
+    bool play_tts_in_explorable_areas = true;
+    bool play_tts_in_outposts = true;
 
     struct PendingNPCAudio;
     typedef std::string (*GenerateVoiceCallback)(PendingNPCAudio* audio);
@@ -483,19 +497,7 @@ namespace {
         1991 // Durmand
     };
 
-    // Cost optimization settings
-    bool stop_speech_when_dialog_closed = false;
-    bool play_goodbye_messages = false;
-    bool only_use_first_dialog = true;
-    bool only_use_first_sentence = true; // NB: Not changable because we don't know how to stop a running audio file!
-    bool play_speech_from_non_friendly_npcs = true;
-    bool play_speech_bubbles_in_explorable = false;
-    bool play_speech_bubbles_in_outpost = true;
-    bool play_speech_bubbles_from_party_members = false;
-    float npc_speech_bubble_range = GW::Constants::Range::Adjacent;
-    bool play_speech_from_vendors = true;
-    bool play_tts_in_explorable_areas = true;
-    bool play_tts_in_outposts = true;
+
 
     uint32_t last_dialog_agent_id = 0;
 
@@ -1481,7 +1483,7 @@ return audio_data;
 
 } // namespace
 
-void NPCVoiceModule::Initialize()
+void TextToSpeechModule::Initialize()
 {
     ToolboxModule::Initialize();
 
@@ -1796,7 +1798,7 @@ void NPCVoiceModule::Initialize()
     DEBUG_ASSERT(OnAgentSpeechBubble_UICallback_Func);
 }
 
-void NPCVoiceModule::Terminate()
+void TextToSpeechModule::Terminate()
 {
     ToolboxModule::Terminate();
     ClearSounds();
@@ -1810,7 +1812,7 @@ void NPCVoiceModule::Terminate()
     }
 }
 
-void NPCVoiceModule::LoadSettings(ToolboxIni* ini)
+void TextToSpeechModule::LoadSettings(ToolboxIni* ini)
 {
     ToolboxModule::LoadSettings(ini);
 
@@ -1859,7 +1861,7 @@ void NPCVoiceModule::LoadSettings(ToolboxIni* ini)
     }
 }
 
-void NPCVoiceModule::SaveSettings(ToolboxIni* ini)
+void TextToSpeechModule::SaveSettings(ToolboxIni* ini)
 {
     ToolboxModule::SaveSettings(ini);
 
@@ -1906,7 +1908,7 @@ void NPCVoiceModule::SaveSettings(ToolboxIni* ini)
     }
 }
 
-void NPCVoiceModule::DrawSettingsInternal()
+void TextToSpeechModule::DrawSettingsInternal()
 {
     static bool show_passwords = false;
     ImGui::Separator();
@@ -2029,8 +2031,8 @@ void NPCVoiceModule::DrawSettingsInternal()
         ImGui::NextSpacedElement();
         ImGui::Checkbox(GetRaceName(it.first), (bool*) & it.second);
     }
-
-// Custom NPC Voice Assignment Section
+    ImGui::Unindent();
+    // Custom NPC Voice Assignment Section
     if (!is_api_locked_down) {
         ImGui::Separator();
         ImGui::Text("Custom NPC Voice Assignment:");
