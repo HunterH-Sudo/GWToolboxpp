@@ -204,6 +204,11 @@ namespace {
     bool skip_characters_from_another_campaign_prompt = true;
     bool auto_age2_on_age = true;
     bool auto_age_on_vanquish = false;
+    bool auto_screenshot_on_boss_kill = false;
+    bool auto_screenshot_on_vanquish = false;
+    bool auto_screenshot_on_mission_complete = false;
+    bool auto_screenshot_on_dungeon_complete = false;
+    bool auto_screenshot_on_title_maxed = false;
     bool auto_open_locked_chest = false;
     bool auto_open_locked_chest_with_key = false;
     bool keep_current_quest_when_new_quest_added = false;
@@ -1356,12 +1361,12 @@ namespace {
             return;
         switch (message_id) {
             case GW::UI::UIMessage::kPreBuildLoginScene: {
-                GW::GameThread::Enqueue([]() {
+                GW::GameThread::Enqueue([] {
                     OverrideDefaultOnlineStatus();
                 },true);        
             } break;
             case GW::UI::UIMessage::kPartyShowConfirmDialog: {
-                const auto packet = (GW::UI::UIPacket::kPartyShowConfirmDialog*)wParam;
+                const auto packet = static_cast<GW::UI::UIPacket::kPartyShowConfirmDialog*>(wParam);
                 if (skip_characters_from_another_campaign_prompt && wcscmp(packet->prompt_enc_str, L"\x8101\x05d2") == 0) {
                     // "Yes" to skip the confirm prompt
                     GW::UI::ButtonClick(GW::UI::GetChildFrame(GW::UI::GetFrameByLabel(L"Party"), 1, 10, 6));
@@ -1431,12 +1436,34 @@ namespace {
             case GW::UI::UIMessage::kVanquishComplete: {
                 if (auto_age_on_vanquish)
                     GW::Chat::SendChat('/', L"age");
+                if (auto_screenshot_on_vanquish)
+                    GW::UI::Keypress(GW::UI::ControlAction_Screenshot);
                 if (block_vanquish_complete_popup)
                     GW::UI::SetFrameVisible(GW::UI::GetChildFrame(GW::UI::GetFrameByLabel(L"Game"), 6, 8), false) || (Log::Warning("Failed to hide vanquish popup"), true);
             }
             break;
+            case GW::UI::UIMessage::kMissionComplete: {
+                if (auto_screenshot_on_mission_complete)
+                    GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+            }
+            break;
+            case GW::UI::UIMessage::kDungeonComplete: {
+                if (auto_screenshot_on_dungeon_complete)
+                    GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+            }
+            break;
             case GW::UI::UIMessage::kDialogButton: {
                 OnDialogButton((GW::UI::DialogButtonInfo*)wParam);
+            } break;
+            case GW::UI::UIMessage::kTitleProgressUpdated: {
+                if (auto_screenshot_on_title_maxed) {
+                    const auto title_id = static_cast<GW::Constants::TitleID>(reinterpret_cast<uint32_t>(wParam));
+                    const auto title = GW::PlayerMgr::GetTitleTrack(title_id);
+                    // TODO: @Jon help
+                    if (title && title->points_needed_next_rank == 0xFFFFFFFF && title->current_title_tier_index == title->max_title_tier_index) {
+                        GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+                    }
+                }
             } break;
             
         }
@@ -1802,13 +1829,16 @@ void GameSettings::Initialize()
         GW::UI::UIMessage::kShowCancelEnterMissionBtn,
         GW::UI::UIMessage::kPartyDefeated,
         GW::UI::UIMessage::kVanquishComplete,
+        GW::UI::UIMessage::kMissionComplete,
+        GW::UI::UIMessage::kDungeonComplete,
         GW::UI::UIMessage::kPartyShowConfirmDialog,
         GW::UI::UIMessage::kVendorWindow,
         GW::UI::UIMessage::kDialogButton,
         GW::UI::UIMessage::kQuestAdded,
         GW::UI::UIMessage::kSendSetActiveQuest,
         GW::UI::UIMessage::kVendorTransComplete,
-        GW::UI::UIMessage::kExperienceGained
+        GW::UI::UIMessage::kExperienceGained,
+        GW::UI::UIMessage::kTitleProgressUpdated
     };
     for (const auto message_id : post_ui_messages) {
         RegisterUIMessageCallback(&OnPostUIMessage_HookEntry, message_id, OnPostUIMessage, 0x8000);
@@ -1951,6 +1981,11 @@ void GameSettings::LoadSettings(ToolboxIni* ini)
     LOAD_BOOL(notify_when_players_leave_outpost);
 
     LOAD_BOOL(auto_age_on_vanquish);
+    LOAD_BOOL(auto_screenshot_on_boss_kill);
+    LOAD_BOOL(auto_screenshot_on_vanquish);
+    LOAD_BOOL(auto_screenshot_on_mission_complete);
+    LOAD_BOOL(auto_screenshot_on_dungeon_complete);
+    LOAD_BOOL(auto_screenshot_on_title_maxed);
     LOAD_BOOL(hide_dungeon_chest_popup);
     LOAD_BOOL(auto_age2_on_age);
     LOAD_BOOL(auto_accept_invites);
@@ -2145,6 +2180,12 @@ void GameSettings::SaveSettings(ToolboxIni* ini)
     SAVE_BOOL(skip_entering_name_for_faction_donate);
     SAVE_BOOL(drop_ua_on_cast);
 
+    SAVE_BOOL(auto_screenshot_on_boss_kill);
+    SAVE_BOOL(auto_screenshot_on_vanquish);
+    SAVE_BOOL(auto_screenshot_on_mission_complete);
+    SAVE_BOOL(auto_screenshot_on_dungeon_complete);
+    SAVE_BOOL(auto_screenshot_on_title_maxed);
+
     SAVE_BOOL(check_and_prompt_if_mission_already_completed);
 
     SAVE_BOOL(lazy_chest_looting);
@@ -2292,6 +2333,12 @@ void GameSettings::DrawSettingsInternal()
 
     ImGui::Checkbox("Automatic /age2 on /age", &auto_age2_on_age);
     ImGui::ShowHelp("GWToolbox++ will show /age2 time after /age is shown in chat");
+
+    ImGui::Checkbox("Automatic screenshot on vanquish", &auto_screenshot_on_vanquish);
+    ImGui::Checkbox("Automatic screenshot on boss kill", &auto_screenshot_on_boss_kill);
+    ImGui::Checkbox("Automatic screenshot on mission complete", &auto_screenshot_on_mission_complete);
+    ImGui::Checkbox("Automatic screenshot on dungeon complete", &auto_screenshot_on_dungeon_complete);
+    ImGui::Checkbox("Automatic screenshot on title maxed", &auto_screenshot_on_title_maxed);
 
     ImGui::Checkbox("Block full screen message when entering a new area", &block_enter_area_message);
 
@@ -2685,6 +2732,16 @@ void GameSettings::OnAgentAdd(GW::HookStatus*, const GW::Packet::StoC::AgentAdd*
 // Block ghost in the box death animation & sound
 void GameSettings::OnUpdateAgentState(GW::HookStatus*, GW::Packet::StoC::AgentState* packet)
 {
+    if (auto_screenshot_on_boss_kill) {
+        const auto agent = GW::Agents::GetAgentByID(packet->agent_id);
+        const auto living = agent ? agent->GetAsAgentLiving() : nullptr;
+        if (living && living->GetHasBossGlow()) {
+            if (!living->GetIsDead() && (packet->state & 0x0010)) {
+                GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+            }
+        }
+    }
+
     if (prevent_weapon_spell_animation_on_player && (packet->state & 0x8000) && packet->agent_id == GW::Agents::GetControlledCharacterId()) {
         packet->state ^= 0x8000;
     }
