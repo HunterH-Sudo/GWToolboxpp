@@ -232,6 +232,8 @@ namespace {
 
     bool useful_level_progress_label = true;
 
+    std::map<GW::Constants::TitleID, uint32_t> last_recorded_tiers;
+
     GW::HookEntry SkillList_UICallback_HookEntry;
     GW::UI::UIInteractionCallback SkillList_UICallback_Func = 0, SkillList_UICallback_Ret = 0;
 
@@ -497,6 +499,8 @@ namespace {
         uint32_t h000c;
         uint32_t h0010;
     };
+
+    clock_t pending_screenshot = 0;
 
     using SetFrameSkillDescription_pt = void(__fastcall*)(SetFrameSkillDescriptionParam* param);
     SetFrameSkillDescription_pt SetFrameSkillDescription_Func = nullptr, SetFrameSkillDescription_Ret = nullptr;
@@ -1355,6 +1359,16 @@ namespace {
         GW::Hook::LeaveHook();
     }
 
+    void RecordTitleTiers() {
+        last_recorded_tiers.clear();
+        if (!GW::Map::GetIsMapLoaded()) return;
+        const auto w = GW::GetWorldContext();
+        if (!w) return;
+        for (size_t title_id = 0; title_id < w->titles.size(); title_id++) {
+            last_recorded_tiers[static_cast<GW::Constants::TitleID>(title_id)] = w->titles[title_id].current_title_tier_index;
+        }
+    }
+
     void OnPostUIMessage(GW::HookStatus* status, GW::UI::UIMessage message_id, void* wParam, void*)
     {
         if (status->blocked)
@@ -1417,10 +1431,14 @@ namespace {
                     GW::PartyMgr::ReturnToOutpost() || (Log::Warning("Failed to return to outpost"), true);
             }
             break;
+            case GW::UI::UIMessage::kMapChange: {
+                RecordTitleTiers();
+            } break;
             case GW::UI::UIMessage::kMapLoaded: {
                 last_online_status = static_cast<uint32_t>(GW::FriendListMgr::GetMyStatus());
                 SetXpBarLabel();
                 block_enter_area_message && GW::UI::SetFrameVisible(GW::UI::GetChildFrame(GW::UI::GetFrameByLabel(L"Game"), 6, 0), false);
+                RecordTitleTiers();
             }
             break;
             case GW::UI::UIMessage::kExperienceGained: {
@@ -1436,21 +1454,18 @@ namespace {
             case GW::UI::UIMessage::kVanquishComplete: {
                 if (auto_age_on_vanquish)
                     GW::Chat::SendChat('/', L"age");
-                if (auto_screenshot_on_vanquish)
-                    GW::UI::Keypress(GW::UI::ControlAction_Screenshot);
+                if (auto_screenshot_on_vanquish) pending_screenshot = TIMER_INIT();
                 if (block_vanquish_complete_popup)
                     GW::UI::SetFrameVisible(GW::UI::GetChildFrame(GW::UI::GetFrameByLabel(L"Game"), 6, 8), false) || (Log::Warning("Failed to hide vanquish popup"), true);
             }
             break;
             case GW::UI::UIMessage::kMissionComplete: {
-                if (auto_screenshot_on_mission_complete)
-                    GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+                if (auto_screenshot_on_mission_complete) pending_screenshot = TIMER_INIT();
             }
             break;
             case GW::UI::UIMessage::kDungeonComplete: {
-                if (auto_screenshot_on_dungeon_complete)
-                    GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
-            }
+                if (auto_screenshot_on_dungeon_complete) pending_screenshot = TIMER_INIT();
+            }  
             break;
             case GW::UI::UIMessage::kDialogButton: {
                 OnDialogButton((GW::UI::DialogButtonInfo*)wParam);
@@ -1459,9 +1474,8 @@ namespace {
                 if (auto_screenshot_on_title_maxed) {
                     const auto title_id = static_cast<GW::Constants::TitleID>(reinterpret_cast<uint32_t>(wParam));
                     const auto title = GW::PlayerMgr::GetTitleTrack(title_id);
-                    // TODO: @Jon help
-                    if (title && title->points_needed_next_rank == 0xFFFFFFFF && title->current_title_tier_index == title->max_title_tier_index) {
-                        GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+                    if (title && title->max_title_tier_index == title->current_title_tier_index && last_recorded_tiers.contains(title_id) && last_recorded_tiers[title_id] != title->current_title_tier_index) {
+                        pending_screenshot = TIMER_INIT();
                     }
                 }
             } break;
@@ -2334,11 +2348,20 @@ void GameSettings::DrawSettingsInternal()
     ImGui::Checkbox("Automatic /age2 on /age", &auto_age2_on_age);
     ImGui::ShowHelp("GWToolbox++ will show /age2 time after /age is shown in chat");
 
-    ImGui::Checkbox("Automatic screenshot on vanquish", &auto_screenshot_on_vanquish);
-    ImGui::Checkbox("Automatic screenshot on boss kill", &auto_screenshot_on_boss_kill);
-    ImGui::Checkbox("Automatic screenshot on mission complete", &auto_screenshot_on_mission_complete);
-    ImGui::Checkbox("Automatic screenshot on dungeon complete", &auto_screenshot_on_dungeon_complete);
-    ImGui::Checkbox("Automatic screenshot on title maxed", &auto_screenshot_on_title_maxed);
+    ImGui::TextUnformatted("Automatic screenshot on:");
+    ImGui::Indent();
+    ImGui::StartSpacedElements(checkbox_w);
+    ImGui::NextSpacedElement();
+    ImGui::Checkbox("Vanquish", &auto_screenshot_on_vanquish);
+    ImGui::NextSpacedElement();
+    ImGui::Checkbox("Boss kill", &auto_screenshot_on_boss_kill);
+    ImGui::NextSpacedElement();
+    ImGui::Checkbox("Mission complete", &auto_screenshot_on_mission_complete);
+    ImGui::NextSpacedElement();
+    ImGui::Checkbox("Dungeon complete", &auto_screenshot_on_dungeon_complete);
+    ImGui::NextSpacedElement();
+    ImGui::Checkbox("Title maxed", &auto_screenshot_on_title_maxed);
+    ImGui::Unindent();
 
     ImGui::Checkbox("Block full screen message when entering a new area", &block_enter_area_message);
 
@@ -2553,6 +2576,11 @@ void GameSettings::FactionEarnedCheckAndWarn()
 
 void GameSettings::Update(float)
 {
+    if (pending_screenshot && TIMER_DIFF(pending_screenshot) > 250) {
+        GW::UI::Screenshot();
+        pending_screenshot = 0;
+    }
+
     UpdateSkillTooltip();
     UpdateReinvite();
     UpdateItemTooltip();
@@ -2737,7 +2765,7 @@ void GameSettings::OnUpdateAgentState(GW::HookStatus*, GW::Packet::StoC::AgentSt
         const auto living = agent ? agent->GetAsAgentLiving() : nullptr;
         if (living && living->GetHasBossGlow()) {
             if (!living->GetIsDead() && (packet->state & 0x0010)) {
-                GW::UI::Keypress(GW::UI::ControlAction::ControlAction_Screenshot);
+                pending_screenshot = TIMER_INIT();
             }
         }
     }
