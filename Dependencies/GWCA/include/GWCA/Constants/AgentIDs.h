@@ -490,7 +490,8 @@ namespace GW
                 constexpr int MiniatureEcclesiateXunRao = 9039;
             }
 
-            namespace SummoningStone {
+            namespace SummoningStone
+            {
                 constexpr int ImperialCripplingSlash = 9043;
                 constexpr int ImperialTripleChop = 9044;
                 constexpr int ImperialBarrage = 9045;
@@ -511,7 +512,7 @@ namespace GW
                 constexpr int TenguPanic = 9060;
                 constexpr int TenguAuraOftheLich = 9061;
                 constexpr int TenguDefiantWasXinrae = 9062;
-            } // namespace SummoningStone
+            }
         }
     }
 }
