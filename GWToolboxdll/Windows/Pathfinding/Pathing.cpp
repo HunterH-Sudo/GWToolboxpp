@@ -486,6 +486,11 @@ namespace Pathing {
         std::vector<GW::MapProp*> travel_portals;
         std::vector<MapSpecific::teleport_node> m_teleportGraph;
 		volatile bool m_terminateThread = false;
+
+        // Runtime/tmp vars that would otherwise have been static for cca - maybe add mutex?
+        std::unordered_map<const GW::PathingTrapezoid*, bool> GetTrapezoidNeighbours_visited;
+        std::vector<Explore> GetTrapezoidNeighbours_to_explore;
+        std::vector<Neighbour> isNeighbourOf_neighbours; 
 		
 	void createPortalPair(const GW::PathingTrapezoid* pt1, uint8_t pt1_layer, const GW::PathingTrapezoid* pt2, uint8_t pt2_layer,
         GW::Vec2f p1, bool p1_viability,
@@ -522,11 +527,13 @@ namespace Pathing {
         if (trapezoid->YB == trapezoid->YT) return;
         auto* mc = GW::GetMapContext();
         if (!mc) return;
+        
+        auto& visited = GetTrapezoidNeighbours_visited;
+        auto& to_explore = GetTrapezoidNeighbours_to_explore;
 
-        static std::vector<Explore> to_explore; //static is cca. 10% faster
+
         to_explore.clear();
         to_explore.reserve(10);
-        static std::unordered_map<const GW::PathingTrapezoid*, bool> visited;	//make it static because it takes really long time to construct
         visited.clear();														// and reserve an unordered map. -> cca. 20x faster
         visited.reserve(mc->path->pathNodes.size());							//
 
@@ -628,8 +635,8 @@ namespace Pathing {
 	
 	
     bool isNeighbourOf(const GW::PathingTrapezoid* pt1, uint8_t pt1_layer, const GW::PathingTrapezoid* pt2) {
-        //#warning "static variable"
-		static std::vector<Neighbour> neighbours; 
+        auto& neighbours = isNeighbourOf_neighbours;
+
         neighbours.clear();
         GW::PathingMapArray* map = GW::Map::GetPathingMap();
         if (!map || pt1_layer >= map->size()) return false;

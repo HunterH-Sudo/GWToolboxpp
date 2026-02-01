@@ -64,7 +64,7 @@ namespace Pathing {
         void* GetImpl() { return opaque; };
     private:
         void LoadMapSpecificData();
-        int opaque[/*sizeof(Impl)*/244 / sizeof(int)];
+        int opaque[316 / sizeof(int)];
     };
 
     class AStar {
