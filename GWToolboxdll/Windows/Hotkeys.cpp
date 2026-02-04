@@ -320,7 +320,7 @@ bool TBHotkey::Draw(Op* op, bool first, bool last)
 {
     bool hotkey_changed = false;
     const float scale = ImGui::GetIO().FontGlobalScale;
-    auto ShowHeaderButtons = [&] {
+    const auto show_header_buttons = [&] {
         ImGui::PushID(static_cast<int>(ui_id));
         ImGui::PushID("header");
         const ImGuiStyle& style = ImGui::GetStyle();
@@ -445,10 +445,10 @@ bool TBHotkey::Draw(Op* op, bool first, bool last)
     ASSERT(snprintf(&header[written], _countof(header) - written, " [%s]###header%u", keybuf_s.c_str(), ui_id) != -1);
     constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_AllowOverlap;
     if (!ImGui::CollapsingHeader(header, flags)) {
-        ShowHeaderButtons();
+        show_header_buttons();
     }
     else {
-        ShowHeaderButtons();
+        show_header_buttons();
         ImGui::Indent();
         ImGui::PushID(static_cast<int>(ui_id));
         ImGui::PushItemWidth(-140.0f * scale);

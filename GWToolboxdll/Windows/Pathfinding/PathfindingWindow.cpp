@@ -17,7 +17,6 @@
 #include <Windows/Pathfinding/Pathing.h>
 #include <Widgets/Minimap/Minimap.h>
 #include <Modules/Resources.h>
-#include <Utils/ToolboxUtils.h>
 #include <GWCA/Context/MapContext.h>
 #include <Utils/ArenaNetFileParser.h>
 
@@ -36,12 +35,12 @@ namespace {
         if (!(mc && mc->path && mc->path->staticData)) return nullptr;
 
         auto hash = static_cast<uint64_t>(mc->path->staticData->map_id);
-        hash |= ((uint64_t)mc->path->pathNodes.size()) << 32;
+        hash |= static_cast<uint64_t>(mc->path->pathNodes.size()) << 32;
 
         if (mile_paths_by_coords.contains(hash))
             return mile_paths_by_coords[hash];
 
-        auto m = new Pathing::MilePath(mc);
+        const auto m = new Pathing::MilePath(mc);
         mile_paths_by_coords[hash] = m;
         return m;
     }
@@ -87,7 +86,7 @@ namespace {
             if (!milepath) {
                 return;
             }
-            auto tmpAstar = new Pathing::AStar(milepath);
+            const auto tmpAstar = new Pathing::AStar(milepath);
             const auto res = tmpAstar->Search(from, to);
             if (res != Pathing::Error::OK) {
                 Log::Error("Pathing failed; Pathing::Error code %d", res);
@@ -115,7 +114,7 @@ namespace {
                 #ifdef _DEBUG
                 // Load from map context, but also load from the DAT - save both to JSON to review and compare the data.
                 if (packet->file_name && *packet->file_name) {
-                    uint32_t map_file_id = ArenaNetFileParser::FileHashToFileId(packet->file_name);
+                    const uint32_t map_file_id = ArenaNetFileParser::FileHashToFileId(packet->file_name);
 
                     auto from_dat = new Pathing::PathingMapData();
                     if (!Pathing::LoadPathingMapDataFromDAT(map_file_id, from_dat)) {
@@ -132,16 +131,16 @@ namespace {
                         auto write_to = std::format(L"pathing_map_data_from_file_{:#}.json", from_dat->map_file_id);
                         auto fp = fopen(Resources::GetPath(write_to).string().c_str(), "wb");
                         if (fp) {
-                            nlohmann::json json = *from_dat;
-                            auto str = json.dump(2);
+                            const nlohmann::json json = *from_dat;
+                            const auto str = json.dump(2);
                             fwrite(str.data(), str.size(), 1, fp);
                             fclose(fp);
                         }
                         write_to = std::format(L"pathing_map_data_from_context_{:#}.json", from_context->map_file_id);
                         fp = fopen(Resources::GetPath(write_to).string().c_str(), "wb");
                         if (fp) {
-                            nlohmann::json json = *from_context;
-                            auto str = json.dump(2);
+                            const nlohmann::json json = *from_context;
+                            const auto str = json.dump(2);
                             fwrite(str.data(), str.size(), 1, fp);
                             fclose(fp);
                         }
@@ -193,7 +192,7 @@ void PathfindingWindow::Draw(IDirect3DDevice9*)
         return ImGui::End();
     }
 
-    auto player = GW::Agents::GetObservingAgent();
+    const auto player = GW::Agents::GetObservingAgent();
     if (!player) {
         return ImGui::End();
     }
