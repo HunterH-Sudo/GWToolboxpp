@@ -126,7 +126,10 @@ namespace {
         clock_t calculated_at = 0;
         uint32_t current_waypoint = 0;
         GW::Constants::QuestID quest_id{};
-        bool calculating = false;
+        clock_t calculating = 0;
+        bool IsCalculating() { 
+            return calculating && TIMER_DIFF(calculating) < 5000;
+        }
 
         void ClearMinimapLines()
         {
@@ -185,7 +188,7 @@ namespace {
         {
             if (calculated_at &&
                 from == calculated_from && calculated_to == original_quest_marker) {
-                calculating = true;
+                calculating = TIMER_INIT();
                 OnQuestPathRecalculated(waypoints, (void*)quest_id); // No need to recalculate
                 return;
             }
@@ -195,20 +198,20 @@ namespace {
                 if (waypoints.size()) {
                     // Quest marker has changed to infinity; clear any current markers
                     waypoints.clear();
-                    calculating = true;
+                    calculating = TIMER_INIT();
                     OnQuestPathRecalculated(waypoints, (void*)quest_id); // No need to recalculate
                 }
                 return;
             }
             calculating = PathfindingWindow::CalculatePath(calculated_from, calculated_to, OnQuestPathRecalculated, (void*)quest_id);
-            if (!calculating) {
+            if (!IsCalculating()) {
                 calculated_at = 0;
             }
         }
 
         bool Update(const GW::GamePos& from)
         {
-            if (calculating) {
+            if (IsCalculating()) {
                 return false;
             }
             const auto quest = GetQuest();
@@ -339,7 +342,7 @@ namespace {
             }
         }
         cqp->calculated_at = TIMER_INIT();
-        cqp->calculating = false;
+        cqp->calculating = 0;
         cqp->UpdateUI();
     }
 
