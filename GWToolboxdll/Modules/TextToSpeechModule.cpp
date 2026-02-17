@@ -128,7 +128,7 @@ namespace {
         {GenerateVoiceOpenAI ,"OpenAI", "https://platform.openai.com/api-keys"},
         {GenerateVoiceGoogle ,"Google Cloud", "https://console.cloud.google.com/apis/credentials", "Note: Make sure to enable the Text-to-Speech API in your Google Cloud project"},
         {GenerateVoicePlayHT ,"Play.ht", "https://elevenlabs.io/app/settings/api-keys", "Note: Play.ht requires both an API Key and User ID", true},
-        {GenerateVoiceKokoro, "Kokoro (Self-Hosted)", "https://github.com/remsky/Kokoro-FastAPI", "Enter your Kokoro-FastAPI server URL in the API Key field (default: http://localhost:8880)"},
+        {GenerateVoiceKokoro, "Kokoro (Self-Hosted)", "https://github.com/remsky/Kokoro-FastAPI", "Enter your Kokoro-FastAPI server URL in the API Key field (default: http://localhost:8880) AAAAAAAAAAAAAAAAAAAAA"},
     };
 
     // TTS Provider settings
