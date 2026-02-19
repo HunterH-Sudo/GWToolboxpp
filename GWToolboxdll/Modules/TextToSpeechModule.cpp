@@ -128,7 +128,7 @@ namespace {
         {GenerateVoiceOpenAI ,"OpenAI", "https://platform.openai.com/api-keys"},
         {GenerateVoiceGoogle ,"Google Cloud", "https://console.cloud.google.com/apis/credentials", "Note: Make sure to enable the Text-to-Speech API in your Google Cloud project"},
         {GenerateVoicePlayHT ,"Play.ht", "https://elevenlabs.io/app/settings/api-keys", "Note: Play.ht requires both an API Key and User ID", true},
-        {GenerateVoiceKokoro, "Kokoro (Self-Hosted)", "https://github.com/remsky/Kokoro-FastAPI", "Enter your Kokoro-FastAPI server URL in the API Key field (default: http://localhost:8880) AAAAAAAAAAAAAAAAAAAAA"},
+        {GenerateVoiceKokoro, "Kokoro (Self-Hosted)", "https://github.com/remsky/Kokoro-FastAPI", "Enter your Kokoro-FastAPI server URL in the API Key field (default: http://localhost:8880)"},
     };
 
     // TTS Provider settings
@@ -505,7 +505,7 @@ namespace {
 
     uint32_t last_dialog_agent_id = 0;
 
-    size_t max_text_length = 512;
+    size_t max_text_length = 4096;
     VoiceProfile default_voice_profile(voice_id_human_male, 0.5f, 0.5f, 0.5f, 1.0f, "");
 
     std::wstring PreprocessEncodedTextForTTS(const std::wstring& text);
@@ -1122,7 +1122,7 @@ namespace {
         client.SetFollowLocation(true);
         client.SetVerifyHost(false);
         client.SetVerifyPeer(false);
-        client.SetTimeoutSec(10);
+        client.SetTimeoutSec(20);
 
         client.Execute();
 
@@ -1265,7 +1265,7 @@ namespace {
         request_body["model"] = "kokoro";
         request_body["input"] = TextUtils::WStringToString(audio->decoded_message);
         
-        std::string voice_name = (audio->gender == Gender::Female) ? "af_bella" : "am_adam";
+        std::string voice_name = (audio->gender == Gender::Female) ? "af_heart" : "am_michael";
         request_body["voice"] = voice_name;
         request_body["response_format"] = "mp3";
         request_body["speed"] = audio->profile->speaking_rate;
@@ -1285,6 +1285,7 @@ namespace {
         request_body["lang_code"] = lang_code;
 
         RestClient client;
+        client.SetHeader("Accept", "audio/mpeg");
         const auto audio_data = PostJson(client, base_url + "/v1/audio/speech", request_body, api_config->name);
         if (!audio_data.empty()) {
             VoiceLog("Kokoro voice generation successful, received %zu bytes", audio_data.size());
