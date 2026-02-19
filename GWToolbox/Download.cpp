@@ -178,7 +178,7 @@ bool DownloadWindow::DownloadAllFiles(std::wstring& error)
     dllpath = dllpath.parent_path() / "GWToolboxdll.dll";
 
     std::string content;
-    if (!Download(content, "https://api.github.com/repos/gwdevhub/GWToolboxpp/releases/latest")) {
+    if (!Download(content, "https://api.github.com/repos/HunterH-Sudo/GWToolboxpp/releases/latest")) {
         // @Remark:
         // We may not be able to grep Github api. (For instance, if we spam it)
         return error = L"Couldn't download the latest release of GWToolboxpp", true;
