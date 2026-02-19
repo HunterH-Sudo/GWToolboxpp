@@ -1122,7 +1122,7 @@ namespace {
         client.SetFollowLocation(true);
         client.SetVerifyHost(false);
         client.SetVerifyPeer(false);
-        client.SetTimeoutSec(2);
+        client.SetTimeoutSec(10);
 
         client.Execute();
 
