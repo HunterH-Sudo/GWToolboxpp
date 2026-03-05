@@ -34,7 +34,7 @@ namespace {
         Done
     };
 
-    Step step = Checking;
+    Step step = CheckAndAsk;
 
     bool is_latest_version = true;
     bool notified = false;
