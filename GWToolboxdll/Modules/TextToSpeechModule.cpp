@@ -487,7 +487,7 @@ namespace {
         float stability = 0.5f;
         float similarity = 0.5f;
         float style = 0.5f;
-        float speaking_rate = 1.0f;
+        float speaking_rate = 10.0f;
         std::string accent_modifier = "";
 
         VoiceProfile() = default;
@@ -505,7 +505,7 @@ namespace {
 
     uint32_t last_dialog_agent_id = 0;
 
-    size_t max_text_length = 512;
+    size_t max_text_length = 2048;
     VoiceProfile default_voice_profile(voice_id_human_male, 0.5f, 0.5f, 0.5f, 1.0f, "");
 
     std::wstring PreprocessEncodedTextForTTS(const std::wstring& text);
@@ -1265,7 +1265,7 @@ namespace {
         request_body["model"] = "kokoro";
         request_body["input"] = TextUtils::WStringToString(audio->decoded_message);
         
-        std::string voice_name = (audio->gender == Gender::Female) ? "af_bella" : "am_adam";
+        std::string voice_name = (audio->gender == Gender::Female) ? "af_heart" : "am_santa";
         request_body["voice"] = voice_name;
         request_body["response_format"] = "mp3";
         request_body["speed"] = audio->profile->speaking_rate;
