@@ -21,7 +21,7 @@ namespace {
     };
 
     ReleaseType release_type = ReleaseType::Stable;
-    Mode mode = Mode::CheckAndAsk;
+    Mode mode = Mode::DontCheckForUpdates;
 
     // 0=checking, 1=asking, 2=downloading, 3=done
     enum Step {
@@ -49,7 +49,7 @@ namespace {
         // Get list of releases
         std::string response;
         unsigned int tries = 0;
-        const auto url = "https://api.github.com/repos/gwdevhub/GWToolboxpp/releases";
+        const auto url = "https://api.github.com/repos/HunterH-Sudo/GWToolboxpp/releases";
         bool success = false;
         do {
             success = Resources::Instance().Download(url, response);
