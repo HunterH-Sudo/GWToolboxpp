@@ -444,7 +444,7 @@ Gender GetGenderByFileId(const uint32_t file_id)
         float stability = 0.5f;
         float similarity = 0.5f;
         float style = 0.5f;
-        float speaking_rate = 4.0f;
+        float speaking_rate = 2.0f;
         std::string accent_modifier = "";
 
         VoiceProfile() = default;
@@ -1159,7 +1159,7 @@ Gender GetGenderByFileId(const uint32_t file_id)
         glz::generic request_body;
         request_body["model"] = "kokoro";
         request_body["input"] = TextUtils::WStringToString(audio->decoded_message);
-        request_body["voice"] = (audio->gender == Gender::Female) ? "af_bella" : "am_adam";
+        request_body["voice"] = (audio->gender == Gender::Female) ? "af_bella" : "am_santa";
         request_body["response_format"] = "mp3";
         request_body["speed"] = audio->profile->speaking_rate;
         request_body["lang_code"] = lang_code;
