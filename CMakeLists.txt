@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.29)
 
+project(gwtoolbox)
+
 if(NOT CMAKE_GENERATOR MATCHES "Ninja|Makefile")
     set(CMAKE_GENERATOR_PLATFORM win32)
 endif()
 
-project(gwtoolbox)
-
-set(GWTOOLBOXEXE_VERSION "4.7")
-set(GWTOOLBOXEXE_MODULE_VERSION "4,7,0,0") # used for exe module info. See GWToolbox/GWToolbox.rc
-set(GWTOOLBOXDLL_VERSION "8.26")
+set(GWTOOLBOXEXE_VERSION "4.6")
+set(GWTOOLBOXEXE_MODULE_VERSION "4,6,0,0") # used for exe module info. See GWToolbox/GWToolbox.rc
+set(GWTOOLBOXDLL_VERSION "8.27")
 set(GWTOOLBOXDLL_VERSION_BETA "") # can be anything. Marks beta version if not empty.
 set(GWTOOLBOX_MODULE_VERSION "8,26,0,0") # used for Dll module info. See GWToolboxdll/GWToolbox.rc
 
