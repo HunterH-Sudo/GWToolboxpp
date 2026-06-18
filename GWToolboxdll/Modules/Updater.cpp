@@ -66,7 +66,7 @@ namespace {
         // Get list of releases
         std::string response;
         unsigned int tries = 0;
-        const auto url = "https://api.github.com/repos/gwdevhub/GWToolboxpp/releases";
+        const auto url = "https://api.github.com/repos/hunterh-sudo/GWToolboxpp/releases";
         bool success = false;
         do {
             success = Resources::Instance().Download(url, response);

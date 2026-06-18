@@ -444,7 +444,7 @@ Gender GetGenderByFileId(const uint32_t file_id)
         float stability = 0.5f;
         float similarity = 0.5f;
         float style = 0.5f;
-        float speaking_rate = 1.0f;
+        float speaking_rate = 4.0f;
         std::string accent_modifier = "";
 
         VoiceProfile() = default;

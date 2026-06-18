@@ -6,11 +6,11 @@ endif()
 
 project(gwtoolbox)
 
-set(GWTOOLBOXEXE_VERSION "4.6")
-set(GWTOOLBOXEXE_MODULE_VERSION "4,6,0,0") # used for exe module info. See GWToolbox/GWToolbox.rc
-set(GWTOOLBOXDLL_VERSION "8.25")
+set(GWTOOLBOXEXE_VERSION "4.7")
+set(GWTOOLBOXEXE_MODULE_VERSION "4,7,0,0") # used for exe module info. See GWToolbox/GWToolbox.rc
+set(GWTOOLBOXDLL_VERSION "8.26")
 set(GWTOOLBOXDLL_VERSION_BETA "") # can be anything. Marks beta version if not empty.
-set(GWTOOLBOX_MODULE_VERSION "8,25,0,0") # used for Dll module info. See GWToolboxdll/GWToolbox.rc
+set(GWTOOLBOX_MODULE_VERSION "8,26,0,0") # used for Dll module info. See GWToolboxdll/GWToolbox.rc
 
 
 if(MSVC_TOOLSET_VERSION LESS 143)
@@ -34,6 +34,8 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 add_compile_definitions(
     "NOMINMAX"
     "WIN32_LEAN_AND_MEAN"
+    # glaze's zmij float writer uses _mm_cvtsi128_si64, an x64-only intrinsic, when SSE is detected; we build x86
+    "ZMIJ_USE_SIMD=0"
 
     "GWTOOLBOXEXE_VERSION=\"${GWTOOLBOXEXE_VERSION}\""
     "GWTOOLBOXEXE_MODULE_VERSION=${GWTOOLBOXEXE_MODULE_VERSION}"
@@ -112,6 +114,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         -Wno-delete-non-abstract-non-virtual-dtor
     )
     add_compile_options(${CLANG_WARNING_DISABLES})
+    
+    add_compile_options($<$<NOT:$<CONFIG:Debug>>:/clang:-O3>)
+    add_compile_options(/arch:AVX2)
 else()
     # MSVC: whole-program optimization + link-time codegen in non-Debug
     add_compile_options(/MP)
